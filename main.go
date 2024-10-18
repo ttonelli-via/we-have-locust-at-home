@@ -64,10 +64,11 @@ func main() {
 
 func getEm(url string, nodeNumber int, ctx context.Context) {
 	ticker := time.NewTicker(time.Second / time.Duration(requestsPerSecond))
+outer:
 	for {
 		select {
 		case <-ctx.Done():
-			break
+			break outer
 		case <-ticker.C:
 			go func() {
 				reqBody := []byte(jsonBody)
