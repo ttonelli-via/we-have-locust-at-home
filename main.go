@@ -69,26 +69,28 @@ func getEm(url string, nodeNumber int, ctx context.Context) {
 		case <-ctx.Done():
 			break
 		case <-ticker.C:
-			reqBody := []byte(jsonBody)
-			req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(reqBody))
-			if err != nil {
-				wrapped := fmt.Errorf("unable to create request due to the following error: %w", err)
-				log.Fatalln(wrapped.Error())
-			}
-			req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", keycloakToken))
-			req.Header.Add("Content-Type", "application/json")
+			go func() {
+				reqBody := []byte(jsonBody)
+				req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(reqBody))
+				if err != nil {
+					wrapped := fmt.Errorf("unable to create request due to the following error: %w", err)
+					log.Fatalln(wrapped.Error())
+				}
+				req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", keycloakToken))
+				req.Header.Add("Content-Type", "application/json")
 
-			client := &http.Client{}
+				client := &http.Client{}
 
-			now := time.Now()
-			res, err := client.Do(req)
-			if err != nil {
-				wrapped := fmt.Errorf("request failed due to the following error: %w", err)
-				log.Fatalln(wrapped.Error())
-			}
-			resTime := time.Since(now)
+				now := time.Now()
+				res, err := client.Do(req)
+				if err != nil {
+					wrapped := fmt.Errorf("request failed due to the following error: %w", err)
+					log.Fatalln(wrapped.Error())
+				}
+				resTime := time.Since(now)
 
-			slog.Info(fmt.Sprintf("Node %d", nodeNumber), "code", res.StatusCode, "response-time", resTime)
+				slog.Info(fmt.Sprintf("Node %d", nodeNumber), "code", res.StatusCode, "response-time", resTime)
+			}()
 		}
 	}
 }
