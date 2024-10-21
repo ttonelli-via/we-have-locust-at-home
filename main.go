@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"log/slog"
 	"net/http"
@@ -28,7 +28,6 @@ var nodeUrls []string = []string{
 	"https://hns-t-vsc-helm-test-prometheus-5.dev.platform-services.dev1.poweredbyvia.com/",
 }
 
-var keycloakToken string
 var mode string
 var jsonBody string
 var requestsPerSecond int
@@ -41,7 +40,6 @@ const (
 )
 
 func init() {
-	flag.StringVar(&keycloakToken, "keycloak-token", "", "keycloak token to be included in headers")
 	flag.StringVar(&mode, "mode", "commit", "mode for each transaction submission")
 	flag.StringVar(&jsonBody, "json-body", "{}", "json body sent to each of the nodes")
 	flag.IntVar(&requestsPerSecond, "requests-per-sec", 10, "number of requests per second to be fired off per node")
@@ -49,10 +47,6 @@ func init() {
 
 func main() {
 	flag.Parse()
-
-	if keycloakToken == "" {
-		log.Fatal("no keycloak secret provided\n")
-	}
 
 	if mode != "commit" && mode != "sync" && mode != "async" && mode != "adtm" {
 		log.Fatalf("%s is not a valid mode. choose from `commit`, `sync`, `async` or `adtm`.\n", mode)
@@ -158,7 +152,7 @@ func getKeycloakToken(appCtx context.Context) (string, error) {
 	}
 
 	// Read the response body
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to read response body: %v", err)
 	}
