@@ -18,5 +18,10 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.28.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.32.2 // indirect
 	github.com/aws/smithy-go v1.22.0 // indirect
+	github.com/go-interledger/cryptoconditions v0.0.0-20180612102545-aba58e59cef1 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/kalaspuffar/base64url v0.0.0-20171121144659-483af17b794c // indirect
+	github.com/pkg/errors v0.9.1 // indirect
+	github.com/stevenroose/asn1 v0.0.0-20170613173945-a0d410e3f79f // indirect
+	golang.org/x/crypto v0.28.0 // indirect
 )

@@ -39,6 +39,78 @@ const (
 	SecretArn = "arn:aws:secretsmanager:ca-central-1:977445517197:secret:keycloak_dev_user_credentials-CFTeIU"
 )
 
+type EmbeddedObject struct {
+	Test string `json:"test"`
+}
+
+// Struct to represent the details of the asset
+type AssetDetails struct {
+	ID             string         `json:"id"`
+	Msg            string         `json:"msg"`
+	EmbeddedObject EmbeddedObject `json:"embeded_object"`
+}
+
+// Struct to represent the asset data
+type AssetData struct {
+	AssetCategory string       `json:"asset_category"`
+	AssetCreator  string       `json:"asset_creator"`
+	Details       AssetDetails `json:"details"`
+	CreationDate  string       `json:"creation_date"`
+}
+
+// Struct to represent the asset
+type Asset struct {
+	Data AssetData `json:"data"`
+}
+
+// Struct to represent the condition details
+type ConditionDetails struct {
+	Type      string `json:"type"`
+	PublicKey string `json:"public_key"`
+}
+
+// Struct to represent the condition
+type Condition struct {
+	Details ConditionDetails `json:"details"`
+	URI     string           `json:"uri"`
+}
+
+// Struct to represent the outputs
+type TransactionOutput struct {
+	PublicKeys []string  `json:"public_keys"`
+	Condition  Condition `json:"condition"`
+	Amount     string    `json:"amount"`
+}
+
+// Struct to represent the inputs
+type TransactionInput struct {
+	OwnersBefore []string    `json:"owners_before"`
+	Fulfills     interface{} `json:"fulfills"`    // Can be nil
+	Fulfillment  interface{} `json:"fulfillment"` // Can be nil
+}
+
+// Struct to represent the metadata details
+type MetadataDetails struct {
+	Description string `json:"description"`
+}
+
+// Struct to represent the metadata
+type Metadata struct {
+	TransactionDate string          `json:"transaction_date"`
+	Details         MetadataDetails `json:"details"`
+}
+
+// Main struct representing the transaction
+type Transaction struct {
+	ID        *string             `json:"id"` // Can be nil
+	Operation string              `json:"operation"`
+	Asset     Asset               `json:"asset"`
+	Outputs   []TransactionOutput `json:"outputs"`
+	Inputs    []TransactionInput  `json:"inputs"`
+	Metadata  Metadata            `json:"metadata"`
+	Version   string              `json:"version"`
+}
+
 func init() {
 	flag.StringVar(&mode, "mode", "commit", "mode for each transaction submission")
 	flag.StringVar(&jsonBody, "json-body", "{}", "json body sent to each of the nodes")
@@ -199,6 +271,88 @@ outer:
 			break outer
 		case <-ticker.C:
 			go func() {
+				now := time.Now()
+				formattedTime := now.Format("2006-01-02T15:04:05.999999-07:00")
+				//var private_key = "5TsfxtkpUGqPB8ym5rYpqsgu7iqoYQSkVSnXfTdVvPG6"
+				var public_key = "Gbpuf4s4c13MtDvaFLtTWDQdxxPw7j4QnRNsBCetUp7V"
+
+				embeddedObject := EmbeddedObject{
+					Test: "keep-calm",
+				}
+
+				// Create the asset details
+				assetDetails := AssetDetails{
+					ID:             "test-id-123",
+					Msg:            "dummy data",
+					EmbeddedObject: embeddedObject,
+				}
+
+				// Create the asset data
+				assetData := AssetData{
+					AssetCategory: "arbitrary_data",
+					AssetCreator:  public_key,
+					Details:       assetDetails,
+					CreationDate:  formattedTime,
+				}
+
+				// Create the asset
+				asset := Asset{
+					Data: assetData,
+				}
+
+				// Create the condition details
+				conditionDetails := ConditionDetails{
+					Type:      "ed25519-sha-256",
+					PublicKey: public_key,
+				}
+
+				// Create the condition
+				condition := Condition{
+					Details: conditionDetails,
+					URI:     "ni:///sha-256;JQG9Mjn1LZdzIJbzkS9KZ0GijfK9fjiWzbsugKuUaUE?fpt=ed25519-sha-256&cost=131072",
+				}
+
+				// Create the outputs
+				outputs := []TransactionOutput{
+					{
+						PublicKeys: []string{public_key},
+						Condition:  condition,
+						Amount:     "1",
+					},
+				}
+
+				// Create the inputs
+				inputs := []TransactionInput{
+					{
+						OwnersBefore: []string{public_key},
+						Fulfills:     nil,
+						Fulfillment:  nil,
+					},
+				}
+
+				// Create the metadata details
+				metadataDetails := MetadataDetails{
+					Description: "test description",
+				}
+
+				// Create the metadata
+				metadata := Metadata{
+					TransactionDate: formattedTime,
+					Details:         metadataDetails,
+				}
+
+				// Create the transaction
+				unsigned_transaction := Transaction{
+					ID:        nil, // ID is nil
+					Operation: "CREATE",
+					Asset:     asset,
+					Outputs:   outputs,
+					Inputs:    inputs,
+					Metadata:  metadata,
+					Version:   "2.0",
+				}
+
+				fmt.Printf("%+v\n", unsigned_transaction)
 
 				reqBody := []byte(jsonBody)
 
@@ -214,7 +368,6 @@ outer:
 
 				client := &http.Client{}
 
-				now := time.Now()
 				res, err := client.Do(req)
 				if err != nil {
 					wrapped := fmt.Errorf("request failed due to the following error: %w", err)
