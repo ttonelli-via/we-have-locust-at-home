@@ -3,6 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -12,12 +15,19 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go/aws"
+	txn "github.com/bigchaindb/go-bigchaindb-driver/pkg/transaction"
+	"github.com/go-interledger/cryptoconditions"
+	"github.com/kalaspuffar/base64url"
+	"github.com/pkg/errors"
+	"golang.org/x/crypto/ed25519"
+	"golang.org/x/crypto/sha3"
 )
 
 var nodeUrls []string = []string{
@@ -38,78 +48,6 @@ const (
 	Region    = "ca-central-1"
 	SecretArn = "arn:aws:secretsmanager:ca-central-1:977445517197:secret:keycloak_dev_user_credentials-CFTeIU"
 )
-
-type EmbeddedObject struct {
-	Test string `json:"test"`
-}
-
-// Struct to represent the details of the asset
-type AssetDetails struct {
-	ID             string         `json:"id"`
-	Msg            string         `json:"msg"`
-	EmbeddedObject EmbeddedObject `json:"embeded_object"`
-}
-
-// Struct to represent the asset data
-type AssetData struct {
-	AssetCategory string       `json:"asset_category"`
-	AssetCreator  string       `json:"asset_creator"`
-	Details       AssetDetails `json:"details"`
-	CreationDate  string       `json:"creation_date"`
-}
-
-// Struct to represent the asset
-type Asset struct {
-	Data AssetData `json:"data"`
-}
-
-// Struct to represent the condition details
-type ConditionDetails struct {
-	Type      string `json:"type"`
-	PublicKey string `json:"public_key"`
-}
-
-// Struct to represent the condition
-type Condition struct {
-	Details ConditionDetails `json:"details"`
-	URI     string           `json:"uri"`
-}
-
-// Struct to represent the outputs
-type TransactionOutput struct {
-	PublicKeys []string  `json:"public_keys"`
-	Condition  Condition `json:"condition"`
-	Amount     string    `json:"amount"`
-}
-
-// Struct to represent the inputs
-type TransactionInput struct {
-	OwnersBefore []string    `json:"owners_before"`
-	Fulfills     interface{} `json:"fulfills"`    // Can be nil
-	Fulfillment  interface{} `json:"fulfillment"` // Can be nil
-}
-
-// Struct to represent the metadata details
-type MetadataDetails struct {
-	Description string `json:"description"`
-}
-
-// Struct to represent the metadata
-type Metadata struct {
-	TransactionDate string          `json:"transaction_date"`
-	Details         MetadataDetails `json:"details"`
-}
-
-// Main struct representing the transaction
-type Transaction struct {
-	ID        *string             `json:"id"` // Can be nil
-	Operation string              `json:"operation"`
-	Asset     Asset               `json:"asset"`
-	Outputs   []TransactionOutput `json:"outputs"`
-	Inputs    []TransactionInput  `json:"inputs"`
-	Metadata  Metadata            `json:"metadata"`
-	Version   string              `json:"version"`
-}
 
 func init() {
 	flag.StringVar(&mode, "mode", "commit", "mode for each transaction submission")
@@ -271,92 +209,20 @@ outer:
 			break outer
 		case <-ticker.C:
 			go func() {
-				now := time.Now()
-				formattedTime := now.Format("2006-01-02T15:04:05.999999-07:00")
-				//var private_key = "5TsfxtkpUGqPB8ym5rYpqsgu7iqoYQSkVSnXfTdVvPG6"
-				var public_key = "Gbpuf4s4c13MtDvaFLtTWDQdxxPw7j4QnRNsBCetUp7V"
 
-				embeddedObject := EmbeddedObject{
-					Test: "keep-calm",
+				tx := createTransaction()
+				// Convert transaction object to JSON
+				txJSON, err := json.Marshal(tx)
+				if err != nil {
+					fmt.Println("Error marshalling transaction:", err)
+					return
 				}
 
-				// Create the asset details
-				assetDetails := AssetDetails{
-					ID:             "test-id-123",
-					Msg:            "dummy data",
-					EmbeddedObject: embeddedObject,
-				}
+				// Print the JSON representation of the transaction
+				//fmt.Println("*** SIGNED TXN:")
+				//fmt.Println(string(txJSON))
 
-				// Create the asset data
-				assetData := AssetData{
-					AssetCategory: "arbitrary_data",
-					AssetCreator:  public_key,
-					Details:       assetDetails,
-					CreationDate:  formattedTime,
-				}
-
-				// Create the asset
-				asset := Asset{
-					Data: assetData,
-				}
-
-				// Create the condition details
-				conditionDetails := ConditionDetails{
-					Type:      "ed25519-sha-256",
-					PublicKey: public_key,
-				}
-
-				// Create the condition
-				condition := Condition{
-					Details: conditionDetails,
-					URI:     "ni:///sha-256;JQG9Mjn1LZdzIJbzkS9KZ0GijfK9fjiWzbsugKuUaUE?fpt=ed25519-sha-256&cost=131072",
-				}
-
-				// Create the outputs
-				outputs := []TransactionOutput{
-					{
-						PublicKeys: []string{public_key},
-						Condition:  condition,
-						Amount:     "1",
-					},
-				}
-
-				// Create the inputs
-				inputs := []TransactionInput{
-					{
-						OwnersBefore: []string{public_key},
-						Fulfills:     nil,
-						Fulfillment:  nil,
-					},
-				}
-
-				// Create the metadata details
-				metadataDetails := MetadataDetails{
-					Description: "test description",
-				}
-
-				// Create the metadata
-				metadata := Metadata{
-					TransactionDate: formattedTime,
-					Details:         metadataDetails,
-				}
-
-				// Create the transaction
-				unsigned_transaction := Transaction{
-					ID:        nil, // ID is nil
-					Operation: "CREATE",
-					Asset:     asset,
-					Outputs:   outputs,
-					Inputs:    inputs,
-					Metadata:  metadata,
-					Version:   "2.0",
-				}
-
-				fmt.Printf("%+v\n", unsigned_transaction)
-
-				reqBody := []byte(jsonBody)
-
-				req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(reqBody))
+				req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(txJSON))
 				if err != nil {
 					wrapped := fmt.Errorf("unable to create request due to the following error: %w", err)
 					log.Fatalln(wrapped.Error())
@@ -368,6 +234,7 @@ outer:
 
 				client := &http.Client{}
 
+				now := time.Now()
 				res, err := client.Do(req)
 				if err != nil {
 					wrapped := fmt.Errorf("request failed due to the following error: %w", err)
@@ -378,4 +245,120 @@ outer:
 			}()
 		}
 	}
+}
+
+func createTransaction() *txn.Transaction {
+	var keyPairs []*txn.KeyPair
+
+	keyPair, _ := txn.NewKeyPair()
+
+	keyPairs = append(keyPairs, keyPair)
+
+	var outputs []txn.Output
+	var issuers []ed25519.PublicKey
+
+	for _, keyPair := range keyPairs {
+		// Create conditions
+		condition := txn.NewEd25519Condition(keyPair.PublicKey)
+
+		// Create output
+		output, _ := txn.NewOutput(*condition, "1")
+
+		outputs = append(outputs, output)
+
+		// Create issuers
+		issuers = append(issuers, keyPair.PublicKey)
+	}
+
+	data := make(map[string]interface{})
+	data["assetID"] = "testID1"
+	asset := txn.Asset{
+		Data: data,
+	}
+	metadata := make(map[string]interface{})
+	metadata["planet"] = "earth"
+
+	// New create transaction
+	txn, _ := txn.NewCreateTransaction(asset, metadata, outputs, issuers)
+
+	txn, _ = Sign(keyPairs, txn)
+
+	return txn
+}
+
+func Sign(keyPairs []*txn.KeyPair, t *txn.Transaction) (*txn.Transaction, error) {
+	// Set transaction ID to nil value
+	t.ID = nil
+	signedTx := *t
+	// Compute signatures of inputs
+	for idx, input := range signedTx.Inputs {
+		var serializedTxn strings.Builder
+		s, err := t.String()
+		if err != nil {
+			return nil, err
+		}
+		serializedTxn.WriteString(s)
+		keyPair := keyPairs[idx]
+		// If fulfills is not empty, add to make unique serialization Txn
+		if input.Fulfills != nil {
+			serializedTxn.WriteString(input.Fulfills.TransactionID)
+			serializedTxn.WriteString(string(input.Fulfills.OutputIndex))
+		}
+
+		bytes_to_sign := []byte(serializedTxn.String())
+
+		h3_256 := sha3.New256()
+		h3_256.Write(bytes_to_sign)
+		h3_256Hash := h3_256.Sum(nil)
+
+		// rand reader is ignored within Sign method; crypto.Hash(0) is sanity check to
+		// make sure bytes_to_sign is not hashed already - ed25519.PrivateKey cannot sign hashed msg
+		signature, _ := keyPair.PrivateKey.Sign(rand.Reader, h3_256Hash, crypto.Hash(0))
+
+		// https://tools.ietf.org/html/draft-thomas-crypto-conditions-03#section-8.5
+		ed25519Fulfillment, err := cryptoconditions.NewEd25519Sha256(keyPair.PublicKey, signature)
+		if err != nil {
+			return nil, errors.Wrap(err, "Could not create fulfillment")
+		}
+		// TODO - Not sure whether this should be ed25519Fulfillment.Encode()
+		// TODO - or ed25519Fulfillment.Condition().Encode()
+		ff, err := ed25519Fulfillment.Encode()
+		if err != nil {
+			return nil, err
+		}
+		ffSt := base64url.Encode(ff)
+		signedTx.Inputs[idx].Fulfillment = &ffSt
+	}
+	// Create ID of transaction (hash of body)
+	id, err := createID(&signedTx)
+	if err != nil {
+		return nil, errors.Wrap(err, "Could not create ID")
+	}
+	signedTx.ID = &id
+
+	// Return the signed transaction
+	return &signedTx, nil
+}
+
+func createID(t *txn.Transaction) (string, error) {
+
+	// Strip ID of txn
+	tn := &txn.Transaction{
+		ID:        nil,
+		Version:   t.Version,
+		Inputs:    t.Inputs,
+		Outputs:   t.Outputs,
+		Operation: t.Operation,
+		Asset:     t.Asset,
+		Metadata:  t.Metadata,
+	}
+	// Serialize transaction - encoding/json follows RFC7159 and BDB marshalling
+	dbytes, err := tn.JSON()
+	if err != nil {
+		return "", err
+	}
+
+	// Return hash of serialized txn object
+	h := sha3.Sum256(dbytes)
+	return hex.EncodeToString(h[:]), nil
 }
